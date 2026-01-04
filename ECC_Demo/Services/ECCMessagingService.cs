@@ -6,8 +6,9 @@ using System.Text;
 namespace ECC_Demo
 {
     /// <summary>
-    /// Encapsulates logic for Peer-to-Peer messaging using ECDHE for key exchange
-    /// and AES (ECIES-like) for message encryption.
+    /// Service responsible for Peer-to-Peer messaging.
+    /// It handles the ECDHE key exchange (generating ephemeral keys) and 
+    /// AES encryption/decryption (ECIES implementation).
     /// </summary>
     public class ECCMessagingService
     {
@@ -104,10 +105,17 @@ namespace ECC_Demo
 
             try
             {
+                _logger("---------------------------------------------------------------", Color.Gray);
+                _logger($"[MSG] Sending: \"{message}\"", Color.Cyan);
+
                 using (Aes aes = Aes.Create())
                 {
                     aes.Key = _sharedSecret;
                     aes.GenerateIV();
+
+                    _logger($"[AES] Encrypting with Shared Secret.", Color.Gray);
+                    _logger($"      Key: {BitConverter.ToString(aes.Key).Replace("-", "").Substring(0, 20)}...", Color.Gray);
+                    _logger($"      IV:  {BitConverter.ToString(aes.IV).Replace("-", "")}", Color.Gray);
 
                     byte[] plainBytes = Encoding.UTF8.GetBytes(message);
 
@@ -120,13 +128,14 @@ namespace ECC_Demo
                         Array.Copy(aes.IV, 0, payload, 0, aes.IV.Length);
                         Array.Copy(cipherBytes, 0, payload, aes.IV.Length, cipherBytes.Length);
 
-                        await SendPacketAsync(2, payload);
+                        _logger($"[AES] Ciphertext Generated ({cipherBytes.Length} bytes).", Color.Gray);
+                        _logger($"      Hex: {BitConverter.ToString(cipherBytes).Replace("-", "")}", Color.Gray);
 
-                        _logger($"[ME] {message}", Color.White);
-                        _logger($"     [Encrypted] IV: {BitConverter.ToString(aes.IV).Replace("-", "")}", Color.Gray);
-                        _logger($"     [Encrypted] Cipher: {BitConverter.ToString(cipherBytes).Replace("-", "")}", Color.Gray);
+                        await SendPacketAsync(2, payload);
+                        _logger("[NET] Packet Sent.", Color.White);
                     }
                 }
+                _logger("---------------------------------------------------------------", Color.Gray);
             }
             catch (Exception ex)
             {
@@ -148,20 +157,33 @@ namespace ECC_Demo
                 _ecdhKey = new ECDiffieHellmanCng(256);
                 _ecdhKey.KeyDerivationFunction = ECDiffieHellmanKeyDerivationFunction.Hash;
                 _ecdhKey.HashAlgorithm = CngAlgorithm.Sha256;
+
                 _logger("[ECDHE] Generated local Key Pair (Curve P-256).", Color.White);
+
+                // EXPORT PARAMETERS FOR DEMO (Private D and Public Q)
+                // Note: Exporting private keys is for educational visualization only.
+                try
+                {
+                    ECParameters paramsDump = _ecdhKey.ExportParameters(true);
+                    if (paramsDump.D != null)
+                        _logger($"[KEY] My Private (D): {BitConverter.ToString(paramsDump.D).Replace("-", "")}", Color.Gray);
+                    if (paramsDump.Q.X != null)
+                        _logger($"[KEY] My Public (X):  {BitConverter.ToString(paramsDump.Q.X).Replace("-", "")}", Color.Gray);
+                    if (paramsDump.Q.Y != null)
+                        _logger($"[KEY] My Public (Y):  {BitConverter.ToString(paramsDump.Q.Y).Replace("-", "")}", Color.Gray);
+                }
+                catch
+                {
+                    _logger("[KEY] (Private key extraction suppressed by OS/Hardware security)", Color.DarkGray);
+                }
 
 #pragma warning disable SYSLIB0043
                 byte[] myPublicKey = _ecdhKey.PublicKey.ToByteArray();
 #pragma warning restore SYSLIB0043
 
-                string hexKey = BitConverter.ToString(myPublicKey).Replace("-", "");
-                _logger($"[ECDHE] My Public Key ({myPublicKey.Length} bytes):", Color.Gray);
-                _logger($"        {hexKey.Substring(0, 32)}...", Color.Gray);
-
                 // Send Public Key Packet (Type 1)
                 await SendPacketAsync(1, myPublicKey);
                 _logger("[NET] Sent Public Key packet to peer.", Color.White);
-                _logger("---------------------------------------------------------------", Color.Gray);
             }
             catch (Exception ex)
             {
@@ -237,22 +259,22 @@ namespace ECC_Demo
         {
             try
             {
-                _logger("---------------------------------------------------------------", Color.Gray);
                 string hexPeer = BitConverter.ToString(publicKeyBytes).Replace("-", "");
-                _logger($"[NET] Received Peer Public Key ({publicKeyBytes.Length} bytes):", Color.Yellow);
-                _logger($"      {hexPeer.Substring(0, 32)}...", Color.Gray);
+                _logger($"[NET] Received Peer Public Key ({publicKeyBytes.Length} bytes).", Color.Yellow);
 
                 if (_ecdhKey == null) return;
 
                 using (CngKey peerKey = CngKey.Import(publicKeyBytes, CngKeyBlobFormat.EccPublicBlob))
                 {
-                    _logger("[ECDH] Computing Shared Secret (ECDH)...", Color.White);
+                    _logger("[ECDH] Running Diffie-Hellman Key Derivation...", Color.White);
+                    _logger($"       Formula: SharedSecret = ECDH(MyPrivate, PeerPublic)", Color.Gray);
+
                     _sharedSecret = _ecdhKey.DeriveKeyMaterial(peerKey);
                 }
 
                 string hexSecret = BitConverter.ToString(_sharedSecret).Replace("-", "");
                 _logger("[ECDH] Shared Secret Derived Successfully!", Color.Lime);
-                _logger($"       Secret (AES Key): {hexSecret}", Color.Lime);
+                _logger($"       AES Key: {hexSecret}", Color.Lime);
                 _logger("---------------------------------------------------------------", Color.Gray);
             }
             catch (Exception ex)
@@ -269,8 +291,8 @@ namespace ECC_Demo
         {
             try
             {
-                _logger("[NET] Received Encrypted Payload:", Color.Yellow);
-                _logger($"      Bytes: {BitConverter.ToString(payload).Replace("-", "")}", Color.Gray);
+                _logger("---------------------------------------------------------------", Color.Gray);
+                _logger("[NET] Received Encrypted Packet.", Color.Yellow);
 
                 if (_sharedSecret == null)
                 {
@@ -291,18 +313,20 @@ namespace ECC_Demo
 
                     aes.IV = iv;
 
-                    _logger($"[ECIES] Decrypting with Shared Secret...", Color.White);
-                    _logger($"        IV: {BitConverter.ToString(iv).Replace("-", "")}", Color.Gray);
+                    _logger($"[AES] Ciphertext: {BitConverter.ToString(cipherText).Replace("-", "").Substring(0, Math.Min(50, cipherText.Length))}...", Color.Gray);
+                    _logger($"[AES] IV:         {BitConverter.ToString(iv).Replace("-", "")}", Color.Gray);
+                    _logger($"[AES] Decrypting...", Color.White);
 
                     using (var decryptor = aes.CreateDecryptor())
                     {
                         byte[] plainBytes = decryptor.TransformFinalBlock(cipherText, 0, cipherText.Length);
                         string message = Encoding.UTF8.GetString(plainBytes);
 
-                        // Notify UI
+                        _logger($"[CHAT] Message: {message}", Color.Cyan);
                         _onMessageReceived(message);
                     }
                 }
+                _logger("---------------------------------------------------------------", Color.Gray);
             }
             catch (Exception ex)
             {
@@ -312,7 +336,6 @@ namespace ECC_Demo
 
         /// <summary>
         /// Helper method to serialize and write packets to the network stream.
-        /// Packet Format: [Type (1 byte)] [Length (4 bytes)] [Payload (N bytes)]
         /// </summary>
         /// <param name="type">The type of packet.</param>
         /// <param name="payload">The data to send.</param>

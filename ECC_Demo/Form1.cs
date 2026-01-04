@@ -22,25 +22,17 @@ namespace ECC_Demo
         private async void btnStartServer_Click(object sender, EventArgs e)
         {
             if (int.TryParse(txtMyPort.Text, out int port))
-            {
                 await _messagingService.StartServerAsync(port);
-            }
             else
-            {
                 Log("[ERROR] Invalid Port Number", Color.Red);
-            }
         }
 
         private async void btnConnect_Click(object sender, EventArgs e)
         {
             if (int.TryParse(txtTargetPort.Text, out int port))
-            {
                 await _messagingService.ConnectToPeerAsync(port);
-            }
             else
-            {
                 Log("[ERROR] Invalid Target Port Number", Color.Red);
-            }
         }
 
         private async void btnEncryptSend_Click(object sender, EventArgs e)
@@ -58,13 +50,9 @@ namespace ECC_Demo
         private void OnChatMessageReceived(string message)
         {
             if (rtbChatLog.InvokeRequired)
-            {
                 rtbChatLog.Invoke(new Action(() => OnChatMessageReceived(message)));
-            }
             else
-            {
-                Log($"[CHAT] Peer says: {message}", Color.Cyan);
-            }
+                Log($"[PEER] {message}", Color.Cyan);
         }
 
         // ========================================================================
@@ -78,16 +66,14 @@ namespace ECC_Demo
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
                     bool success = _notaryService.SignFile(ofd.FileName);
-
                     if (success)
                     {
-                        lblNotaryStatus.Text = "Status: File Signed Successfully!";
+                        lblNotaryStatus.Text = "Status: Signed Successfully";
                         lblNotaryStatus.ForeColor = Color.Green;
-                        MessageBox.Show($"Created signatures for {Path.GetFileName(ofd.FileName)}", "Signing Complete");
                     }
                     else
                     {
-                        lblNotaryStatus.Text = "Status: Error Signing File";
+                        lblNotaryStatus.Text = "Status: Signing Failed";
                         lblNotaryStatus.ForeColor = Color.Red;
                     }
                 }
@@ -98,50 +84,50 @@ namespace ECC_Demo
         {
             string? origFile = null, sigFile = null, keyFile = null;
 
-            // UI Logic for file selection remains in the Form
-            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "1. Select ORIGINAL File" })
+            // 1. Select Content
+            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "1. Select ORIGINAL File", Filter = "All files (*.*)|*.*" })
             {
                 if (ofd.ShowDialog() != DialogResult.OK) return;
                 origFile = ofd.FileName;
             }
 
-            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "2. Select SIGNATURE (.sig) File" })
+            // 2. Select Signature (Filtered)
+            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "2. Select SIGNATURE (.sig)", Filter = "Signature (*.sig)|*.sig" })
             {
                 if (ofd.ShowDialog() != DialogResult.OK) return;
                 sigFile = ofd.FileName;
             }
 
-            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "3. Select PUBLIC KEY (.pub) File" })
+            // 3. Select Key (Filtered)
+            using (OpenFileDialog ofd = new OpenFileDialog() { Title = "3. Select PUBLIC KEY (.pub)", Filter = "Public Key (*.pub)|*.pub" })
             {
                 if (ofd.ShowDialog() != DialogResult.OK) return;
                 keyFile = ofd.FileName;
             }
 
-            // Delegate verification logic to service
             bool isValid = _notaryService.VerifyFile(origFile, sigFile, keyFile);
 
             if (isValid)
             {
                 lblNotaryStatus.Text = "Status: VALID SIGNATURE";
                 lblNotaryStatus.ForeColor = Color.Green;
-                MessageBox.Show("Signature is VALID.", "Verification Result", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Signature is VALID.\nFile digest matches the signature.", "Verification Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                lblNotaryStatus.Text = "Status: TAMPERED / INVALID";
+                lblNotaryStatus.Text = "Status: INVALID / TAMPERED";
                 lblNotaryStatus.ForeColor = Color.Red;
-                MessageBox.Show("Signature is INVALID.", "Verification Result", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Signature is INVALID.\nFile has been modified or keys do not match.", "Verification Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         // ========================================================================
-        // SHARED: Logging (Marshaling to UI Thread)
+        // SHARED: Logging
         // ========================================================================
 
         private void Log(string message, Color color)
         {
             if (rtbChatLog.IsDisposed) return;
-
             if (rtbChatLog.InvokeRequired)
             {
                 rtbChatLog.Invoke(new Action(() => Log(message, color)));
@@ -152,15 +138,13 @@ namespace ECC_Demo
                 rtbChatLog.SelectionLength = 0;
                 rtbChatLog.SelectionColor = color;
                 rtbChatLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
-                rtbChatLog.SelectionColor = rtbChatLog.ForeColor;
-                rtbChatLog.ScrollToCaret();
+                rtbChatLog.ScrollToCaret(); // Ensure auto-scroll
             }
         }
 
         private void LogNotary(string message, Color color)
         {
             if (rtbNotaryLog.IsDisposed) return;
-
             if (rtbNotaryLog.InvokeRequired)
             {
                 rtbNotaryLog.Invoke(new Action(() => LogNotary(message, color)));
@@ -170,9 +154,8 @@ namespace ECC_Demo
                 rtbNotaryLog.SelectionStart = rtbNotaryLog.TextLength;
                 rtbNotaryLog.SelectionLength = 0;
                 rtbNotaryLog.SelectionColor = color;
-                rtbNotaryLog.AppendText($"[{DateTime.Now:HH:mm:ss.fff}] {message}\r\n"); // Added ms precision
-                rtbNotaryLog.SelectionColor = rtbNotaryLog.ForeColor;
-                rtbNotaryLog.ScrollToCaret();
+                rtbNotaryLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+                rtbNotaryLog.ScrollToCaret(); // Ensure auto-scroll
             }
         }
     }

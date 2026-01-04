@@ -3,85 +3,83 @@
 namespace ECC_Demo
 {
     /// <summary>
-    /// Encapsulates logic for signing and verifying files using ECDSA.
-    /// Improved to use Streams for memory efficiency with large files.
+    /// Service responsible for file signing and verification using ECDSA.
+    /// Provides detailed logging of the Hashing -> Signing process.
     /// </summary>
     public class ECCNotaryService
     {
         private readonly Action<string, Color> _logger;
 
-        /// <summary>
-        /// Initializes a new instance of the ECCNotaryService.
-        /// </summary>
-        /// <param name="logger">Callback for logging status messages.</param>
         public ECCNotaryService(Action<string, Color> logger)
         {
             _logger = logger;
         }
 
         /// <summary>
-        /// Generates a new key pair, streams the file to compute the signature, and saves the .sig and .pub files.
-        /// Uses FileStream to support large files without loading them entirely into memory.
+        /// Calculates the SHA-256 hash of the file stream, signs the hash, and saves artifacts.
         /// </summary>
-        /// <param name="filePath">The path to the file to be signed.</param>
-        /// <returns>True if signing was successful, otherwise false.</returns>
         public bool SignFile(string filePath)
         {
             try
             {
                 _logger("---------------------------------------------------------------", Color.Gray);
-                _logger($"[ECDSA] START: {DateTime.Now}", Color.Yellow);
-                _logger($"[ECDSA] Operation: SIGN FILE", Color.Cyan);
-                _logger($"[ECDSA] Target File: {Path.GetFileName(filePath)}", Color.Cyan);
+                _logger($"[ECDSA] START SIGNING PROCESS", Color.Yellow);
+                _logger($"[FILE]  Target: {Path.GetFileName(filePath)}", Color.Cyan);
 
-                // Open the file as a stream instead of reading all bytes at once
+                // 1. COMPUTE HASH (Digest)
+                // We do this explicitly to show the user that we sign the HASH, not the file directly.
+                byte[] fileHash;
                 using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                 {
-                    _logger($"        Size: {fs.Length} bytes", Color.Gray);
+                    _logger($"[FILE]  Size: {fs.Length} bytes. Stream opened.", Color.Gray);
+                    _logger("[HASH]  Calculating SHA-256 Digest of file...", Color.White);
+                    fileHash = SHA256.HashData(fs);
+                }
 
-                    _logger("[ECDSA] File opened safely. Stream ready.", Color.Gray);
+                string hashHex = BitConverter.ToString(fileHash).Replace("-", "");
+                _logger($"[HASH]  SHA-256 Digest: {hashHex}", Color.Cyan);
 
-                    // Generate new Signing Keys
-                    _logger("[ECDSA] Initializing new ECDsaCng object...", Color.White);
-                    _logger("[ECDSA] Generating new NIST P-256 Elliptic Curve Keypair...", Color.Yellow);
-                    using (ECDsaCng dsa = new ECDsaCng(256))
+                // 2. GENERATE KEYS
+                _logger("[KEYS]  Generating new ECDSA Key Pair (Curve P-256)...", Color.White);
+                using (ECDsaCng dsa = new ECDsaCng(256))
+                {
+                    dsa.HashAlgorithm = CngAlgorithm.Sha256;
+
+                    // Export private key parameters for DEMO visualization
+                    try
                     {
-                        dsa.HashAlgorithm = CngAlgorithm.Sha256;
+                        var p = dsa.ExportParameters(true);
+                        if (p.D != null)
+                            _logger($"[KEYS]  Private (D): {BitConverter.ToString(p.D).Replace("-", "")}", Color.Gray);
+                        if (p.Q.X != null)
+                            _logger($"[KEYS]  Public (X):  {BitConverter.ToString(p.Q.X).Replace("-", "")}", Color.Gray);
+                        if (p.Q.Y != null)
+                            _logger($"[KEYS]  Public (Y):  {BitConverter.ToString(p.Q.Y).Replace("-", "")}", Color.Gray);
+                    }
+                    catch { /* Ignore if OS protects key */ }
 
-                        // Sign the Stream directly
-                        // This reads the file in chunks, preventing high memory usage
-                        _logger($"[ECDSA] Key generated. Algorithm: {dsa.Key.Algorithm.Algorithm}", Color.Gray);
-                        _logger("[ECDSA] Hashing algorithm set to SHA256", Color.Gray);
+                    // 3. CREATE SIGNATURE
+                    _logger("[SIGN]  Encrypting Hash with Private Key...", Color.White);
 
-                        // Sign the Stream directly
-                        // This reads the file in chunks, preventing high memory usage
-                        _logger("[ECDSA] BEGIN: Hashing stream and creating signature...", Color.White);
-                        byte[] signature = dsa.SignData(fs, HashAlgorithmName.SHA256);
+                    // We sign the PRE-CALCULATED HASH.
+                    byte[] signature = dsa.SignHash(fileHash);
 
-                        string sigBase64 = Convert.ToBase64String(signature);
-                        _logger($"[ECDSA] Signature Generated ({signature.Length} bytes)!", Color.Lime);
-                        _logger($"        Sig: {sigBase64.Substring(0, 50)}...", Color.Lime);
+                    string sigBase64 = Convert.ToBase64String(signature);
+                    _logger($"[SIGN]  Signature Generated ({signature.Length} bytes)!", Color.Lime);
+                    _logger($"[SIGN]  Value: {sigBase64.Substring(0, 60)}...", Color.Lime);
 
-                        // Export Public Key
+                    // 4. SAVE ARTIFACTS
 #pragma warning disable SYSLIB0043
-                        byte[] publicKey = dsa.Key.Export(CngKeyBlobFormat.EccPublicBlob);
+                    byte[] publicKey = dsa.Key.Export(CngKeyBlobFormat.EccPublicBlob);
 #pragma warning restore SYSLIB0043
 
-                        _logger($"[ECDSA] Public Key Exported ({publicKey.Length} bytes). Format: EccPublicBlob", Color.Gray);
+                    File.WriteAllBytes(filePath + ".sig", signature);
+                    File.WriteAllBytes(filePath + ".pub", publicKey);
 
-                        // Define output paths
-                        string sigPath = filePath + ".sig";
-                        string pubPath = filePath + ".pub";
-
-                        File.WriteAllBytes(sigPath, signature);
-                        File.WriteAllBytes(pubPath, publicKey);
-
-                        _logger($"[ECDSA] Saved signature to: {Path.GetFileName(sigPath)}", Color.White);
-                        _logger($"[ECDSA] Saved public key to: {Path.GetFileName(pubPath)}", Color.White);
-                        _logger("---------------------------------------------------------------", Color.Gray);
-
-                        return true;
-                    }
+                    _logger($"[IO]    Saved: {Path.GetFileName(filePath)}.sig", Color.White);
+                    _logger($"[IO]    Saved: {Path.GetFileName(filePath)}.pub", Color.White);
+                    _logger("---------------------------------------------------------------", Color.Gray);
+                    return true;
                 }
             }
             catch (Exception ex)
@@ -92,61 +90,54 @@ namespace ECC_Demo
         }
 
         /// <summary>
-        /// Verifies a file against a provided signature and public key using Streams.
+        /// Verifies a file by re-calculating its hash and validating the signature with the public key.
         /// </summary>
-        /// <param name="originalPath">Path to the original file.</param>
-        /// <param name="signaturePath">Path to the .sig file.</param>
-        /// <param name="publicKeyPath">Path to the .pub file.</param>
-        /// <returns>True if valid, False if invalid or tampered.</returns>
         public bool VerifyFile(string originalPath, string signaturePath, string publicKeyPath)
         {
             try
             {
                 _logger("---------------------------------------------------------------", Color.Gray);
-                _logger($"[ECDSA] START: {DateTime.Now}", Color.Yellow);
-                _logger("[ECDSA] Operation: VERIFY FILE", Color.Cyan);
-                _logger($"        Original: {Path.GetFileName(originalPath)}", Color.Gray);
-                _logger($"        Signature: {Path.GetFileName(signaturePath)}", Color.Gray);
+                _logger("[ECDSA] START VERIFICATION PROCESS", Color.Yellow);
+                _logger($"[FILE]  Original: {Path.GetFileName(originalPath)}", Color.Cyan);
 
-                // Load small key/signature files into memory
-                _logger("[ECDSA] Reading signature file...", Color.Gray);
+                // 1. READ ARTIFACTS
                 byte[] signature = File.ReadAllBytes(signaturePath);
-                _logger($"[ECDSA] Signature size: {signature.Length} bytes", Color.Gray);
-
-                _logger("[ECDSA] Reading public key file...", Color.Gray);
                 byte[] keyBytes = File.ReadAllBytes(publicKeyPath);
-                _logger($"[ECDSA] Public Key size: {keyBytes.Length} bytes", Color.Gray);
+                _logger($"[IO]    Loaded Signature ({signature.Length} bytes) and Public Key ({keyBytes.Length} bytes).", Color.Gray);
 
-                // Open the large original file as a stream
+                // 2. RE-CALCULATE HASH
+                // Verification requires hashing the file again to ensure it hasn't changed.
+                byte[] fileHash;
                 using (FileStream fs = new FileStream(originalPath, FileMode.Open, FileAccess.Read))
                 {
-                    _logger("[ECDSA] Importing Public Key...", Color.White);
+                    _logger("[HASH]  Re-calculating SHA-256 Digest of original file...", Color.White);
+                    fileHash = SHA256.HashData(fs);
+                }
+                string hashHex = BitConverter.ToString(fileHash).Replace("-", "");
+                _logger($"[HASH]  Current Digest: {hashHex}", Color.Cyan);
 
-                    using (CngKey key = CngKey.Import(keyBytes, CngKeyBlobFormat.EccPublicBlob))
-                    using (ECDsaCng dsa = new ECDsaCng(key))
+                // 3. VERIFY
+                _logger("[VERIFY] Importing Public Key and checking Signature...", Color.White);
+
+                using (CngKey key = CngKey.Import(keyBytes, CngKeyBlobFormat.EccPublicBlob))
+                using (ECDsaCng dsa = new ECDsaCng(key))
+                {
+                    dsa.HashAlgorithm = CngAlgorithm.Sha256;
+
+                    // Verify using the HASH
+                    bool valid = dsa.VerifyHash(fileHash, signature);
+
+                    if (valid)
                     {
-                        dsa.HashAlgorithm = CngAlgorithm.Sha256;
-
-                        _logger("[ECDSA] Public Key imported successfully.", Color.White);
-                        _logger("[ECDSA] Hashing algorithm set to SHA256", Color.Gray);
-
-                        _logger("[ECDSA] BEGIN: Verifying stream hash against signature...", Color.Yellow);
-
-                        // Verify the Stream directly
-                        bool valid = dsa.VerifyData(fs, signature, HashAlgorithmName.SHA256);
-
-                        if (valid)
-                        {
-                            _logger("[ECDSA] RESULT: VALID SIGNATURE. File is Authentic.", Color.Lime);
-                        }
-                        else
-                        {
-                            _logger("[ECDSA] RESULT: INVALID. The file has been TAMPERED with!", Color.Red);
-                        }
-
-                        _logger("---------------------------------------------------------------", Color.Gray);
-                        return valid;
+                        _logger("[RESULT] VALID SIGNATURE. The file is AUTHENTIC.", Color.Lime);
                     }
+                    else
+                    {
+                        _logger("[RESULT] INVALID. The file content does not match the signature.", Color.Red);
+                    }
+
+                    _logger("---------------------------------------------------------------", Color.Gray);
+                    return valid;
                 }
             }
             catch (Exception ex)
