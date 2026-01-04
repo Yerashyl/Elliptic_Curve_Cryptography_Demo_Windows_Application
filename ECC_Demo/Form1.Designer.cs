@@ -35,6 +35,7 @@
             this.lblNotaryStatus = new System.Windows.Forms.Label();
             this.btnVerifyFile = new System.Windows.Forms.Button();
             this.btnSignFile = new System.Windows.Forms.Button();
+            this.rtbNotaryLog = new System.Windows.Forms.RichTextBox();
             this.tabControl1.SuspendLayout();
             this.tabNetworkChat.SuspendLayout();
             this.grpMessaging.SuspendLayout();
@@ -184,6 +185,7 @@
             this.tabFileNotary.Controls.Add(this.grpNotaryInfo);
             this.tabFileNotary.Controls.Add(this.btnVerifyFile);
             this.tabFileNotary.Controls.Add(this.btnSignFile);
+            this.tabFileNotary.Controls.Add(this.rtbNotaryLog);
             this.tabFileNotary.Location = new System.Drawing.Point(4, 24);
             this.tabFileNotary.Name = "tabFileNotary";
             this.tabFileNotary.Padding = new System.Windows.Forms.Padding(3);
@@ -232,6 +234,19 @@
             this.btnSignFile.UseVisualStyleBackColor = true;
             this.btnSignFile.Click += new System.EventHandler(this.btnSignFile_Click);
             // 
+            // rtbNotaryLog
+            // 
+            this.rtbNotaryLog.BackColor = System.Drawing.Color.Black;
+            this.rtbNotaryLog.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.rtbNotaryLog.Font = new System.Drawing.Font("Consolas", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            this.rtbNotaryLog.ForeColor = System.Drawing.Color.Lime;
+            this.rtbNotaryLog.Location = new System.Drawing.Point(3, 260); // Adjust Y as needed, or use Dock
+            this.rtbNotaryLog.Name = "rtbNotaryLog";
+            this.rtbNotaryLog.ReadOnly = true;
+            this.rtbNotaryLog.Size = new System.Drawing.Size(786, 309);
+            this.rtbNotaryLog.TabIndex = 3;
+            this.rtbNotaryLog.Text = "";
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
@@ -273,5 +288,6 @@
         private System.Windows.Forms.Button btnVerifyFile;
         private System.Windows.Forms.GroupBox grpNotaryInfo;
         private System.Windows.Forms.Label lblNotaryStatus;
+        private System.Windows.Forms.RichTextBox rtbNotaryLog;
     }
 }

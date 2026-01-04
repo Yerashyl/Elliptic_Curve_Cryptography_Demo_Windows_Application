@@ -30,22 +30,32 @@ namespace ECC_Demo
             try
             {
                 _logger("---------------------------------------------------------------", Color.Gray);
-                _logger($"[ECDSA] Loading file stream: {Path.GetFileName(filePath)}", Color.Cyan);
+                _logger($"[ECDSA] START: {DateTime.Now}", Color.Yellow);
+                _logger($"[ECDSA] Operation: SIGN FILE", Color.Cyan);
+                _logger($"[ECDSA] Target File: {Path.GetFileName(filePath)}", Color.Cyan);
 
                 // Open the file as a stream instead of reading all bytes at once
                 using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                 {
                     _logger($"        Size: {fs.Length} bytes", Color.Gray);
 
+                    _logger("[ECDSA] File opened safely. Stream ready.", Color.Gray);
+
                     // Generate new Signing Keys
-                    _logger("[ECDSA] Generating new P-256 Signing Keypair...", Color.White);
+                    _logger("[ECDSA] Initializing new ECDsaCng object...", Color.White);
+                    _logger("[ECDSA] Generating new NIST P-256 Elliptic Curve Keypair...", Color.Yellow);
                     using (ECDsaCng dsa = new ECDsaCng(256))
                     {
                         dsa.HashAlgorithm = CngAlgorithm.Sha256;
 
                         // Sign the Stream directly
                         // This reads the file in chunks, preventing high memory usage
-                        _logger("[ECDSA] Hashing stream and creating signature...", Color.White);
+                        _logger($"[ECDSA] Key generated. Algorithm: {dsa.Key.Algorithm.Algorithm}", Color.Gray);
+                        _logger("[ECDSA] Hashing algorithm set to SHA256", Color.Gray);
+
+                        // Sign the Stream directly
+                        // This reads the file in chunks, preventing high memory usage
+                        _logger("[ECDSA] BEGIN: Hashing stream and creating signature...", Color.White);
                         byte[] signature = dsa.SignData(fs, HashAlgorithmName.SHA256);
 
                         string sigBase64 = Convert.ToBase64String(signature);
@@ -56,6 +66,8 @@ namespace ECC_Demo
 #pragma warning disable SYSLIB0043
                         byte[] publicKey = dsa.Key.Export(CngKeyBlobFormat.EccPublicBlob);
 #pragma warning restore SYSLIB0043
+
+                        _logger($"[ECDSA] Public Key Exported ({publicKey.Length} bytes). Format: EccPublicBlob", Color.Gray);
 
                         // Define output paths
                         string sigPath = filePath + ".sig";
@@ -91,13 +103,19 @@ namespace ECC_Demo
             try
             {
                 _logger("---------------------------------------------------------------", Color.Gray);
-                _logger("[ECDSA] Starting Verification...", Color.Cyan);
+                _logger($"[ECDSA] START: {DateTime.Now}", Color.Yellow);
+                _logger("[ECDSA] Operation: VERIFY FILE", Color.Cyan);
                 _logger($"        Original: {Path.GetFileName(originalPath)}", Color.Gray);
                 _logger($"        Signature: {Path.GetFileName(signaturePath)}", Color.Gray);
 
                 // Load small key/signature files into memory
+                _logger("[ECDSA] Reading signature file...", Color.Gray);
                 byte[] signature = File.ReadAllBytes(signaturePath);
+                _logger($"[ECDSA] Signature size: {signature.Length} bytes", Color.Gray);
+
+                _logger("[ECDSA] Reading public key file...", Color.Gray);
                 byte[] keyBytes = File.ReadAllBytes(publicKeyPath);
+                _logger($"[ECDSA] Public Key size: {keyBytes.Length} bytes", Color.Gray);
 
                 // Open the large original file as a stream
                 using (FileStream fs = new FileStream(originalPath, FileMode.Open, FileAccess.Read))
@@ -109,7 +127,10 @@ namespace ECC_Demo
                     {
                         dsa.HashAlgorithm = CngAlgorithm.Sha256;
 
-                        _logger("[ECDSA] Verifying stream hash against signature...", Color.White);
+                        _logger("[ECDSA] Public Key imported successfully.", Color.White);
+                        _logger("[ECDSA] Hashing algorithm set to SHA256", Color.Gray);
+
+                        _logger("[ECDSA] BEGIN: Verifying stream hash against signature...", Color.Yellow);
 
                         // Verify the Stream directly
                         bool valid = dsa.VerifyData(fs, signature, HashAlgorithmName.SHA256);

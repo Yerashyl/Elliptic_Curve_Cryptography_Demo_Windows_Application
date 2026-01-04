@@ -12,7 +12,7 @@ namespace ECC_Demo
 
             // Initialize services with callbacks for UI updates
             _messagingService = new ECCMessagingService(Log, OnChatMessageReceived);
-            _notaryService = new ECCNotaryService(Log);
+            _notaryService = new ECCNotaryService(LogNotary);
         }
 
         // ========================================================================
@@ -154,6 +154,25 @@ namespace ECC_Demo
                 rtbChatLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
                 rtbChatLog.SelectionColor = rtbChatLog.ForeColor;
                 rtbChatLog.ScrollToCaret();
+            }
+        }
+
+        private void LogNotary(string message, Color color)
+        {
+            if (rtbNotaryLog.IsDisposed) return;
+
+            if (rtbNotaryLog.InvokeRequired)
+            {
+                rtbNotaryLog.Invoke(new Action(() => LogNotary(message, color)));
+            }
+            else
+            {
+                rtbNotaryLog.SelectionStart = rtbNotaryLog.TextLength;
+                rtbNotaryLog.SelectionLength = 0;
+                rtbNotaryLog.SelectionColor = color;
+                rtbNotaryLog.AppendText($"[{DateTime.Now:HH:mm:ss.fff}] {message}\r\n"); // Added ms precision
+                rtbNotaryLog.SelectionColor = rtbNotaryLog.ForeColor;
+                rtbNotaryLog.ScrollToCaret();
             }
         }
     }
